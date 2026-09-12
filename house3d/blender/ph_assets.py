@@ -1,7 +1,7 @@
 import bpy, json, urllib.request, urllib.parse, pathlib, math
 from mathutils import Vector
 
-UA = "House3D-FreePipeline/1.0 (Poly Haven assets)"
+UA = "House3D-FreePipeline/1.1 (Poly Haven assets)"
 
 def http_json(url):
     req=urllib.request.Request(url,headers={'User-Agent':UA})
@@ -10,7 +10,7 @@ def http_json(url):
 def download(url,path):
     path=pathlib.Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     if path.exists() and path.stat().st_size>1024:return path
-    print('DOWNLOAD',url)
+    print('DOWNLOAD',url,'->',path)
     req=urllib.request.Request(url,headers={'User-Agent':UA})
     with urllib.request.urlopen(req,timeout=180) as r,open(path,'wb') as f:
         while True:
@@ -67,6 +67,14 @@ def polyhaven_texture(slug,name,cache,scale=1.0):
         im=bpy.data.images.load(str(paths['nor_gl']));im.colorspace_settings.name='Non-Color';n=nt.nodes.new('ShaderNodeTexImage');n.image=im;nt.links.new(mp.outputs['Vector'],n.inputs['Vector']);nm=nt.nodes.new('ShaderNodeNormalMap');nm.inputs['Strength'].default_value=.45;nt.links.new(n.outputs['Color'],nm.inputs['Color']);nt.links.new(nm.outputs['Normal'],bs.inputs['Normal'])
     return m
 
+def dependency_path(asset_dir,url):
+    name=pathlib.Path(urllib.parse.urlparse(url).path).name
+    ext=pathlib.Path(name).suffix.lower()
+    # Poly Haven's glTF files reference image dependencies from ./textures/.
+    if ext in ('.jpg','.jpeg','.png','.webp','.ktx2'):
+        return asset_dir/'textures'/name
+    return asset_dir/name
+
 def import_polyhaven(slug,name,pos,target,rot,cache):
     print('ASSET',slug)
     try:
@@ -80,7 +88,7 @@ def import_polyhaven(slug,name,pos,target,rot,cache):
         c.sort(key=lambda x:x[0],reverse=True);rec=c[0][1];ad=pathlib.Path(cache)/slug;ad.mkdir(parents=True,exist_ok=True)
         main=download(rec['url'],ad/pathlib.Path(urllib.parse.urlparse(rec['url']).path).name)
         for dep in included_records(rec):
-            u=dep['url'];download(u,ad/pathlib.Path(urllib.parse.urlparse(u).path).name)
+            u=dep['url'];download(u,dependency_path(ad,u))
         before=set(bpy.data.objects);bpy.ops.import_scene.gltf(filepath=str(main));objs=[o for o in bpy.data.objects if o not in before]
         if not objs:raise RuntimeError('import empty')
         root=bpy.data.objects.new(name,None);bpy.context.collection.objects.link(root)
