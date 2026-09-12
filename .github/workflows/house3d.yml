@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: house3d-cloud-pipeline
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,13 +29,16 @@ jobs:
       - name: Install Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy
           blender --version
+          python3 -c "import numpy; print('numpy', numpy.__version__)"
 
       - name: Build scene with Blender headless
         run: |
+          rm -rf house3d/dist
           mkdir -p house3d/dist
           blender -b --python house3d/blender/build_scene.py
+          test -s house3d/dist/scene.glb
 
       - name: Assemble web viewer
         run: |
@@ -55,5 +62,6 @@ jobs:
             echo "No generated changes"
           else
             git commit -m "house3d: generated Blender scene [skip ci]"
+            git pull --rebase origin house3d-cloud-pipeline
             git push origin HEAD:house3d-cloud-pipeline
           fi
