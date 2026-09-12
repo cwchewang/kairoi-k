@@ -1,0 +1,59 @@
+name: Build House3D scene
+
+on:
+  push:
+    branches: [house3d-cloud-pipeline]
+    paths:
+      - 'house3d/blender/**'
+      - 'house3d/web/**'
+      - '.github/workflows/house3d.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: house3d-cloud-pipeline
+          fetch-depth: 0
+
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender
+          blender --version
+
+      - name: Build scene with Blender headless
+        run: |
+          mkdir -p house3d/dist
+          blender -b --python house3d/blender/build_scene.py
+
+      - name: Assemble web viewer
+        run: |
+          cp house3d/web/index.html house3d/dist/index.html
+          cp house3d/web/README.txt house3d/dist/README.txt
+          ls -lh house3d/dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: house3d-web
+          path: house3d/dist/
+          retention-days: 14
+
+      - name: Commit generated scene back to branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f house3d/dist
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "house3d: generated Blender scene [skip ci]"
+            git push origin HEAD:house3d-cloud-pipeline
+          fi
